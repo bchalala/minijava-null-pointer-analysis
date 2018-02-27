@@ -1,0 +1,23 @@
+Potential problems:
+
+A -> B
+B -> C
+C -> D
+C -> E 
+D -> F 
+E -> F 
+
+
+
+there needs to be a notion of a follows set
+every record that gets added needs to have 
+
+First check the context, then check the current. If not in a branch, commits to the context get pushed straight through to the npa
+
+
+What if...
+
+node n -> record set
+
+record sets point to other record sets.
+
