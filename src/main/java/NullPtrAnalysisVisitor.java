@@ -129,6 +129,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
    public Context visit(Identifier n, Context argu) {
       Record iden = argu.getMostRecentRecord(argu.getSP(), n.f0.toString());
       argu.eval = iden.getLatticeElement();
+      argu.expType = argu.getVariableType(n.f0.toString());
       return argu; 
     }
 
@@ -142,6 +143,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     */
    public Context visit(Statement n, Context argu) {
       argu.eval = null;
+      argu.expType = new HashSet<String>();
       n.f0.accept(this, argu);
    		return null; 
  		}
@@ -203,13 +205,14 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
 
       Context c1 = new Context(argu);
       Context c2 = new Context(argu);
-      c1.setBranching();
-      c2.setBranching();
-
       n.f4.accept(this, c1);
       n.f6.accept(this, c2);
 
-      List<Record> lr = npa.LeastUpperBound(c1.branchRecords, c2.branchRecords, Node n);
+      argu.commitRecords(c1.branchRecords);
+      argu.commitRecords(c2.branchRecords);
+
+      List<Record> lr = argu.leastUpperBound(c1.branchRecords, c2.branchRecords);
+      argu.commitRecords(lr);
 
    		return null; 
  		}
@@ -224,11 +227,11 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
    public Context visit(WhileStatement n, Context argu) {
       n.f2.accept(this, argu);
 
-
+      // creates a branching context
       Context c1 = new Context(argu);
       n.f4.accept(this, c1);
-
-      // I want to basically take the least upper bound 
+      argu.commitRecords(c1.branchRecords);
+      argu.commitRecords(argu.leastUpperBound(c1.branchRecords));
 
    		return null; 
  		}
@@ -346,10 +349,52 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     * f5 -> ")"
     */
    public Context visit(MessageSend n, Context argu) {
+      List<NullALatticeElement> prevArgEvals = argu.argEvals;
+      argu.argEvals = new ArrayList<NullALatticeElement>();
+
+      String mname = n.f2.toString();
       n.f0.accept(this, argu);
-      n.f2.accept(this, argu);
+
+      Set<String> ts = argu.expType;
+      Set<String> cs = new HashSet<String>();
+      for (String s: ts) {
+        cs.addAll(cha.getClassesWithMethod(s, mname));
+      }
+
+      // Get the least upper bound of all the outs
+      List<Record> curRecs;
+      for (String cname : cs) {
+        List<Record> thisCMRec = npa.getMethodCallRecords(new StringPair(cname, mname));
+        if (curRecs == null) {
+          curRecs = thisCMRec;
+        }
+        else {
+          curRecs = argu.leastUpperBound(thisCMRec, curRecs)
+        }
+      }
+
+      npa.refreshClassFields();
+      argu.commitRecords(curRecs);
+
       n.f4.accept(this, argu);
-   		return null; 
+      npa.addMethodCallArgs(cs, mname, argu.argEvals);
+
+      NullALatticeElement e = null;
+      StringPair cmPair = new StringPair("", mname);
+      for (String cname : cs) {
+        cmPair.first = cname;
+        NullALatticeElement curE = npa.getRet(cmPair);
+        if (e == null) {
+          e = curE;
+        }
+        else {
+          e = NullALatticeElement.leastUpperBound(e, curE);
+        }
+      }
+
+      argu.eval = e;
+      argu.argEvals = prevArgEvals;
+   		return argu;
  		}
 
    /**
@@ -358,7 +403,9 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     */
    public Context visit(ExpressionList n, Context argu) {
       n.f0.accept(this, argu);
-      n.f1.accept(this, argu);
+      if (argu.eval != null) {
+        argEvals.add(argu.eval);
+      }
    		return null; 
  		}
 
@@ -368,6 +415,9 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     */
    public Context visit(ExpressionRest n, Context argu) {
       n.f1.accept(this, argu);
+      if (argu.eval != null) {
+        argEvals.add(argu.eval);
+      }
    		return null; 
  		}
 
@@ -394,6 +444,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     */
    public Context visit(AllocationExpression n, Context argu) {
       argu.eval = NullALatticeElement.getNotNull(); 
+      argu.expType.add(n.f1.toString());
    		return argu;
  		}
 

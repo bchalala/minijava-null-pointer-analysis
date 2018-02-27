@@ -1,23 +1,24 @@
-Potential problems:
+Ok.
 
-A -> B
-B -> C
-C -> D
-C -> E 
-D -> F 
-E -> F 
+Mapping such that Node n points to a NodeRecord nr
 
+node records point to other node records. If you want to look up a value in the table, you then 
+
+Compile function which takes the list of all nodes
 
 
-there needs to be a notion of a follows set
-every record that gets added needs to have 
+-----------
 
-First check the context, then check the current. If not in a branch, commits to the context get pushed straight through to the npa
+Other possibility, which could be way fucking easier
 
+Build mapping of nodes going to other nodes, can do this on the fly. Whenever you look something up in the table, you'd have to traverse the node mapping. This is a bit shitter to be perfectly fair. But I would have to modify way less stuff.
 
-What if...
+S0 -> S1 -> S2 -> S3 -> S4 -> S6
+					 -> S5 -> S6
 
-node n -> record set
+Can build this with a map! 
 
-record sets point to other record sets.
-
+S0 (S0)
+S1 (S0)
+S2 (S1, L(S0))
+S3 ()

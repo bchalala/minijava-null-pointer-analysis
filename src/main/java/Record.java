@@ -15,7 +15,7 @@ public class Record {
 
 	private NullALatticeElement e;
 
-	private Record(String identifier, String cname, boolean isField, NullALatticeElement e, Node n, boolean first) {
+	private Record(String identifier, String cname, boolean isField, NullALatticeElement e, Node n) {
 		this.identifier = identifier;
 		this.cname = cname;
 		this.isField = isField;
@@ -26,27 +26,38 @@ public class Record {
 
 	public NullALatticeElement getLatticeElement() { return e; }
 
-	public boolean isThisRecord(String cname, String identifier) {
-		return cname.equals(this.cname) && identifier.equals(this.identifier);
-	}
-
 	public Node getNode() { return n; }
 
 	public boolean isField() { return isField; }
 
 	public StringPair getClassIdentifierSP() { return new StringPair(cname, identifier); }
 
+	public String getIden() { return identifier; }
+	public String getCName() { return cname; }
+
+	public boolean equals(Record r) {
+		return (getClassIdentifierSP().equals(r.getClassIdentifierSP()) && (isField == r.isField()));
+	}
+
 
 	public static Record getFreshFieldRecord(String classname, String fieldname) {
-		return new Record(fieldname, classname, true, NullALatticeElement.getDontKnow(), null, true);
+		return new Record(fieldname, classname, true, NullALatticeElement.getDontKnow(), null);
 	}
 
 	public static Record getFreshVariableRecord(String classname, String varname) {
-		return new Record(varname, classname, false, NullALatticeElement.getNotNull(), null, true);
+		return new Record(varname, classname, false, NullALatticeElement.getNotNull(), null);
 	}
 
 	public static Record getNewRecord(String c, String v, boolean f, NullALatticeElement e, Node n) {
-		return new Record(v, c, f, e, n, false);
+		return new Record(v, c, f, e, n);
+	}
+
+	public String toString() {
+		String f = "variable: ";
+		if (isField) 
+			f = "field: ";
+
+		return "class: " + cname + " | " + f + identifier + " " + "Lattice: " + e.toString();
 	}
 
 	/*

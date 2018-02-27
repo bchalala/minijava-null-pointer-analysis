@@ -21,7 +21,10 @@ public class ClassHierarchyAnalysis {
    private HashMap<String, HashMap<String, String>> fieldVarTypes = new HashMap<String, HashMap<String, String>>();
    private HashMap<StringPair, String> funRetTypes = new HashMap<StringPair, String>();
 
-   public String getVariableType(String cname, String mname, String iden) {
+   public String getVariableType(StringPair cmPair, String iden) {
+      String cname = cmPair.first;
+      String mname = cmPair.second;
+
       HashMap<String, String> typeMap = methodVarTypes.getOrDefault(new StringPair(cname, mname), new HashMap<String, String>());
       if (typeMap.containsKey(iden)) {
         return typeMap.get(iden);

@@ -18,23 +18,14 @@ public class NullPtrAnalysis {
 	// Output of functions
 	private HashMap<StringPair, NullALatticeElement> cmRet = new HashMap<StringPair, NullALatticeElement>();
 
-	public void addRet(StringPair cmPair, NullALatticeElement e) {
-		cmRet.put(cmPair, e);
-	}
-
-	public void getRet(StringPair cmPair) {
-		cmRet.getOrDefault(cmPair, NullALatticeElement.getDontKnow());
-	}
-
 	// This is going to store the outputs of all the previous iteration's arg ins.
 	// This is the LUB of cmArgsCurrent for a given StringPair.
 	private HashMap<StringPair, List<Record>> cmArgsPrevious = new HashMap<StringPair, List<Record>>();
 
 	// This is going to be the current iteration's arg ins. 
-	// TODO This should probably be changed to a list of a list of lattice elements
-	// Not going to care about the exact record. Everything when evaluated should return lattice element that 
-	// it contains.
-	private HashMap<StringPair, List<List<Record>>> cmArgsCurrent = new HashMap<StringPair, List<List<Record>>>();
+
+	private HashMap<StringPair, List<List<NullALatticeElement>>> cmArgsCurrent = 
+		new HashMap<StringPair, List<List<NullALatticeElement>>>();
 
 	// This is going to be the map that is basically the kafka-esque record store. 
 	// Updates are just thrown into a list. 
@@ -43,40 +34,48 @@ public class NullPtrAnalysis {
 	public void commitRecord(Record r) { methodRecordStore.add(r); }
 	public void commitBranchRecords(List<Record> rs) { methodRecordStore.addAll(rs); }
 
-	public Record getMostRecentRecord(StringPair cmPair, String iden) {
-		boolean isAMethodVar = cha.isMethodVariable(cmPair, iden);
-		StringPair thisCISP = new StringPair(cmPair.first, iden);
+	public void addRet(StringPair cmPair, NullALatticeElement e) {
+		cmRet.put(cmPair, e);
+	}
 
+	public void getRet(StringPair cmPair) {
+		cmRet.getOrDefault(cmPair, NullALatticeElement.getDontKnow());
+	}
+
+	public Record getMostRecentRecord(StringPair cmPair, String iden, boolean field) {
+		StringPair thisCISP = new StringPair(cmPair.first, iden);
 		ListIterator<Record> li = methodRecordStore.listIterator(methodRecordStore.size());
 		while (li.hasPrevious()) {
 			Record r = li.previous();
 			StringPair id = r.getClassIdentifierSP();
-
 			if (id.equals(thisCISP)) {
-				if (isAMethodVar) {
-					if (!(r.isField()))
-						return r;
+				if (field && r.isField()) {
+					return r;
 				}
-				else {
+				if (!field) {
 					return r;
 				}
 			}
 		}
-		System.out.println("Tried to get the record for " + cIden + " but could not find it.");
 		return null;
 	}
 
-	public void addMethodCall(StringPair currentCM, StringPair cmCall, List<Record> lr) {
-		List<List<Record>> cmCallLR = cmArgsCurrent.getOrDefault(cmCall, new ArrayList<List<Record>>());
-		cmCallLR.add(lr);
-		cmArgsCurrent.put(cmCall, cmCallLR);
-
-		refreshClassFields(currentCM);
-		methodRecordStore.addAll(cmLastOutPrevious.getOrDefault(cmCall, new ArrayList<Record>()));
+	public void getMethodCallRecords(StringPair cmCall) {
+		return cmLastOutPrevious.getOrDefault(cmCall, new ArrayList<Record>()));
 	}
 
 	public NullALatticeElement getMethodReturn(StringPair cmCall) {
 		return cmRet.getOrDefault(cmCall, NullALatticeElement.getDontKnow());
+	}
+
+	public void addMethodCallArgs(Set<String> cnames, String mname, List<NullALatticeElement> argLEs) { 
+		StringPair cmPair = new StringPair("", mname);
+		for (String c : cnames) {
+			cmPair.first = c;
+			List<List<NullALatticeElement>> argList = cmArgsCurrent.getOrDefault(cmPair, new ArrayList<List<NullALatticeElement>>());
+			argList.add(argLEs);
+			cmArgsCurrent.put(cmPair, argList);
+		}
 	}
 
 	// Input is a list of StringPairs that are Class, Field.
@@ -143,6 +142,28 @@ public class NullPtrAnalysis {
 
 		methodRecordStore.addAll(inArgRecords);
 	}
+
+	public List<Record> getUniqueRecords(List<Record> lr) {
+		Set<StringPair> uniqueSPs = new HashSet<StringPair>();
+		List<Record> uniqueRecords = new ArrayList<Record>();
+
+		for (Record r : lr) {
+			StringPair cIden = r.getClassIdentifierSP();
+			boolean field = r.isField();
+			if (field) {
+				cIden.second = cIden.second + "~";
+			}
+			if (!uniqueSPs.contains(cIden)) {
+				uniqueSPs.add(cIden);
+				uniqueRecords.add(r);
+			}
+		}
+
+		return uniqueRecords;
+	}
+
+
+	// Called at the end of an iteration
 
 	public void refreshCMOut() { 
 		List<Record> rl;

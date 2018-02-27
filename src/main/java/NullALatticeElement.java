@@ -14,5 +14,18 @@ public class NullALatticeElement {
 	public static NullALatticeElement getDontKnow() { return new NullALatticeElement(DONTKNOW); }
 	public static NullALatticeElement getNotNull() { return new NullALatticeElement(NOTNULL); }
 
+	public static NullALatticeElement leastUpperBound(NullALatticeElement a, NullALatticeElement b) {
+		if (a.isNotNull() && b.isNotNull) {
+			return getNotNull();
+		}
+		else return getDontKnow();
+	}
+
+	public String toString() {
+		if (isNotNull()) 
+			return "NOT NULL";
+		return "DON'T KNOW";
+	}
+
 	public boolean isNotNull() { return val == NOTNULL; }
 }
