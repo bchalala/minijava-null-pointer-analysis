@@ -44,7 +44,7 @@ public class ClassHierarchyAnalysis {
    }
 
    public boolean isFunTyped(StringPair cmPair) { return funRetTypes.containsKey(cmPair); }
-   public boolean getFunTyping(StringPair cmPair) { return funRetTypes.get(cmPair); }
+   public String getFunTyping(StringPair cmPair) { return funRetTypes.get(cmPair); }
 
    public void addMethodVarTyping(StringPair cmPair, String iden, String t) {
       HashMap<String, String> typeMap = methodVarTypes.getOrDefault(cmPair, new HashMap<String, String>());
@@ -56,6 +56,19 @@ public class ClassHierarchyAnalysis {
       HashMap<String, String> typeMap = fieldVarTypes.getOrDefault(cname, new HashMap<String, String>());
       typeMap.put(iden, t);
       fieldVarTypes.put(cname, typeMap);
+   }
+
+   public String getClassOfIdentifier(StringPair cmPair, String iden) {
+      if (isVariable(cmPair, iden))
+        return cmPair.first;
+
+      cmPair.first = getSuperClass(cmPair.first);
+      if (cmPair.first == null) {
+        return null;
+      }
+
+      return getClassOfIdentifier(cmPair, iden);
+
    }
 
    public Set<String> getClassFields(String cname) {
@@ -70,9 +83,9 @@ public class ClassHierarchyAnalysis {
       return methodArguments.getOrDefault(cmPair, new ArrayList<String>());
    }
 
-   public boolean isVariable(StringPair cm, String iden) {
+   public boolean isVariable(StringPair cmPair, String iden) {
     return (methodVariables.getOrDefault(cmPair, new HashSet()).contains(iden) || 
-              classFields.getOrDefault(cm.first, new HashSet()).contains(iden) || 
+              classFields.getOrDefault(cmPair.first, new HashSet()).contains(iden) || 
             methodArguments.getOrDefault(cmPair, new ArrayList()).contains(iden));
    }
 
@@ -92,7 +105,7 @@ public class ClassHierarchyAnalysis {
    public void putClassHierarchyPair(String subC, String superC) {
     upClassHierarchy.put(subC, superC);
     Set<String> subCs = downClassHierarchy.getOrDefault(superC, new HashSet<String>());
-    subCs.add(superC);
+    subCs.add(subC);
     downClassHierarchy.put(superC, subCs);
    }
 
@@ -135,7 +148,8 @@ public class ClassHierarchyAnalysis {
 
     Set<String> subClasses = downClassHierarchy.getOrDefault(c, new HashSet<String>());
     for (String cs : subClasses) {
-      ret.addAll(subClassWithMethod(cs, mname));
+      if (!cs.equals(c))
+        ret.addAll(subClassWithMethod(cs, mname));
     }
 
     return ret;

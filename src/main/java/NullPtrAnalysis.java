@@ -8,12 +8,62 @@ public class NullPtrAnalysis {
 	public NullPtrAnalysis(ClassHierarchyAnalysis cha) {
 		this.cha = cha;
 	}
+
+	public void newIteration() {
+		/*
+		System.out.println("\nLearned in this iteration:");
+		System.out.println("cmRet: " + cmRet);
+		System.out.println("cmLastOutCurrent: " + cmLastOutCurrent);
+		System.out.println("cmArgsCurrent:" + cmArgsCurrent + "\n\n");
+	    */
+		
+			
+		Record.resetCounter();
+
+		refreshCMArgs();
+		refreshCMOut();	
+	}
+
+	public boolean shouldIterate() {
+		/*
+		System.out.println(cmLastOutCurrentPRIORRUN);
+		System.out.println(cmLastOutCurrent);
+		*/
+
+		if (cmLastOutCurrentPRIORRUN == null) {
+			cmLastOutCurrentPRIORRUN = cmLastOutCurrent;
+			return true;
+		}
+
+		for (StringPair k : cmArgsCurrent.keySet()) {
+			List<Record> cur = cmLastOutCurrent.get(k);
+			List<Record> prior = cmLastOutCurrentPRIORRUN.get(k);
+
+			if (cur.size() != prior.size()) {
+				cmLastOutCurrentPRIORRUN = cmLastOutCurrent;
+				return true;
+			}
+
+			for (int i = 0; i < cur.size(); i++) {
+				if (cur.get(i).equals(prior.get(i)) && (cur.get(i).getLatticeElement().equals(prior.get(i).getLatticeElement())))
+					continue;
+				else {
+					cmLastOutCurrentPRIORRUN = cmLastOutCurrent;
+					return true;
+				}
+			}
+		}
+
+		return false;
+		
+	}
 	
 	// This is going to store the outputs of all the previous iteration's method outs. 
 	private HashMap<StringPair, List<Record>> cmLastOutPrevious = new HashMap<StringPair, List<Record>>();
 
 	// This is going to be the current iteration's last outs. 
 	private HashMap<StringPair, List<Record>> cmLastOutCurrent = new HashMap<StringPair, List<Record>>();
+	private HashMap<StringPair, List<Record>> cmLastOutCurrentPRIORRUN = null;
 
 	// Output of functions
 	private HashMap<StringPair, NullALatticeElement> cmRet = new HashMap<StringPair, NullALatticeElement>();
@@ -32,23 +82,25 @@ public class NullPtrAnalysis {
 	private List<Record> methodRecordStore = new ArrayList<Record>();
 
 	public void commitRecord(Record r) { methodRecordStore.add(r); }
-	public void commitBranchRecords(List<Record> rs) { methodRecordStore.addAll(rs); }
+	public void commitRecords(List<Record> rs) { methodRecordStore.addAll(rs); }
 
 	public void addRet(StringPair cmPair, NullALatticeElement e) {
 		cmRet.put(cmPair, e);
 	}
 
-	public void getRet(StringPair cmPair) {
-		cmRet.getOrDefault(cmPair, NullALatticeElement.getDontKnow());
+	public NullALatticeElement getRet(StringPair cmPair) {
+		if (cha.isFunTyped(cmPair))
+			return cmRet.getOrDefault(cmPair, NullALatticeElement.getDontKnow());
+		else 
+			return null;
 	}
 
-	public Record getMostRecentRecord(StringPair cmPair, String iden, boolean field) {
-		StringPair thisCISP = new StringPair(cmPair.first, iden);
+	public Record getMostRecentRecord(StringPair cisp, boolean field) {
 		ListIterator<Record> li = methodRecordStore.listIterator(methodRecordStore.size());
 		while (li.hasPrevious()) {
 			Record r = li.previous();
 			StringPair id = r.getClassIdentifierSP();
-			if (id.equals(thisCISP)) {
+			if (id.equals(cisp)) {
 				if (field && r.isField()) {
 					return r;
 				}
@@ -60,8 +112,8 @@ public class NullPtrAnalysis {
 		return null;
 	}
 
-	public void getMethodCallRecords(StringPair cmCall) {
-		return cmLastOutPrevious.getOrDefault(cmCall, new ArrayList<Record>()));
+	public List<Record> getMethodCallRecords(StringPair cmCall) {
+		return cmLastOutPrevious.getOrDefault(cmCall, new ArrayList<Record>());
 	}
 
 	public NullALatticeElement getMethodReturn(StringPair cmCall) {
@@ -104,14 +156,16 @@ public class NullPtrAnalysis {
 		return rl;
 	}
 
-	public void refreshClassFields(StringPair classMethodPair) {
+	public List<Record> refreshClassFields(StringPair classMethodPair) {
 		String curClass = classMethodPair.first;
+		List<Record> fieldRecords = new ArrayList<Record>();
 		while (curClass != null) {
 			Set<String> fields = cha.getClassFields(curClass);
-			List<Record> fieldRecords = getFreshFieldRecords(curClass, fields);
-			methodRecordStore.addAll(fieldRecords);
+			fieldRecords.addAll(getFreshFieldRecords(curClass, fields));
+
 			curClass = cha.getSuperClass(curClass);
 		}
+		return fieldRecords;
 	}
 
 
@@ -125,8 +179,7 @@ public class NullPtrAnalysis {
 
 		// 1. Get fresh fields usng the getFreshFieldRecords
 		// These fields can come from both the current class as well as any superclass
-		refreshClassFields(classMethodPair);
-
+		methodRecordStore.addAll(refreshClassFields(classMethodPair));
 
 		// 2a. Get fresh variables using the getFreshVariableRecords
 		Set<String> variables = cha.getMethodVariables(classMethodPair);
@@ -147,7 +200,9 @@ public class NullPtrAnalysis {
 		Set<StringPair> uniqueSPs = new HashSet<StringPair>();
 		List<Record> uniqueRecords = new ArrayList<Record>();
 
-		for (Record r : lr) {
+		ListIterator<Record> li = methodRecordStore.listIterator(methodRecordStore.size());
+		while (li.hasPrevious()) {
+			Record r = li.previous();
 			StringPair cIden = r.getClassIdentifierSP();
 			boolean field = r.isField();
 			if (field) {
@@ -164,7 +219,6 @@ public class NullPtrAnalysis {
 
 
 	// Called at the end of an iteration
-
 	public void refreshCMOut() { 
 		List<Record> rl;
 		for (StringPair k : cmLastOutCurrent.keySet()) {
@@ -183,24 +237,31 @@ public class NullPtrAnalysis {
 					newrl.add(r);
 				}
 			}
+
 			cmLastOutPrevious.put(k, newrl);
+			cmLastOutCurrent.put(k, new ArrayList<Record>());
 		}	
 	}
 
 	// Need to get a least upper bound of NullALatticeElement
-
-	// This needs a bit more thought. When we pass an argument into a function
-	// we would like to collect the 
 	public void refreshCMArgs() {
-		/*
-		List<Record> rl;
 		for (StringPair k : cmArgsCurrent.keySet()) {
-			List<Record> newrl = new ArrayList<Record>();
-
-			HashMap m = 
-
+			List<Record> newCMArgRecs = new ArrayList<Record>();
+			List<String> methodArgs = cha.getMethodArguments(k);
+			List<List<NullALatticeElement>> methodCalls = cmArgsCurrent.get(k);
+			NullALatticeElement e = null;
+			for (int i = 0; i < methodArgs.size(); i++) {
+				for (List<NullALatticeElement> lle : methodCalls){
+					if (e == null)
+						e = lle.get(i);
+					else 
+						e = NullALatticeElement.leastUpperBound(e, lle.get(i));
+				}
+				newCMArgRecs.add(Record.getNewRecord(k.first, methodArgs.get(i), false, e, null));
+			}
+			cmArgsPrevious.put(k, newCMArgRecs);
+			cmArgsCurrent.put(k, new ArrayList<List<NullALatticeElement>>());
 		}
-		*/
 	}
 
 }

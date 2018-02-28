@@ -15,10 +15,14 @@ public class NullALatticeElement {
 	public static NullALatticeElement getNotNull() { return new NullALatticeElement(NOTNULL); }
 
 	public static NullALatticeElement leastUpperBound(NullALatticeElement a, NullALatticeElement b) {
-		if (a.isNotNull() && b.isNotNull) {
+		if (a.isNotNull() && b.isNotNull()) {
 			return getNotNull();
 		}
 		else return getDontKnow();
+	}
+
+	public boolean equals(NullALatticeElement a) {
+		return this.isNotNull() == a.isNotNull();
 	}
 
 	public String toString() {

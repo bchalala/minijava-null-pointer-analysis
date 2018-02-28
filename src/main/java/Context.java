@@ -1,4 +1,6 @@
-
+import syntaxtree.*;
+import visitor.*;
+import java.util.*;
 
 public class Context {
 	public ClassHierarchyAnalysis cha;
@@ -9,7 +11,7 @@ public class Context {
 
 	public NullALatticeElement eval = null;
 	public Set<String> expType = new HashSet<String>();
-	
+
 	public List<NullALatticeElement> argEvals = null;
 
 	public boolean branch = false;
@@ -17,9 +19,21 @@ public class Context {
 
 	public Context prevContext = null;
 
+	public Record prevRecord;
+
+	public boolean debug = true;
+
 	// Need to have some notion of records being kept in the context...
 	// Also need to have some sort of mapping from 
-	public Context() {}
+	public Context(ClassHierarchyAnalysis cha, NullPtrAnalysis npa) {
+		this.cha = cha;
+		this.npa = npa;
+		branch = false;
+		branchRecords = new ArrayList<Record>();
+		prevContext = null;
+		eval = null;
+		expType = new HashSet<String>();
+	}
 
 	public Context(Context c) {
 		cha = c.cha;
@@ -40,24 +54,17 @@ public class Context {
 		return "";
 	}
 
-	public void evalFun(StringPair cmPair) {
-		if (npa.isFunTyped(cmPair)) {
-			eval =  npa.getRet(cmPair);
-		}
-		eval = null;
-	}
-
 	// There's gotta be a more efficient way of doing this.
 	private List<Record> trueLeastUpperBound(List<Record> lr1, List<Record> lr2) {
 		List<Record> lub = new ArrayList<Record>();
 		List<Record> noMatch = new ArrayList<Record>();
 
 		for (Record r : lr1) {
-			Record isVisited;
+			Record isVisited = null;
 			for (Record otherr : lr2) {
 				if (r.equals(otherr)) {
 					isVisited = otherr;
-					NullALatticeElement newLE = NullALatticeElement.lub(r.getLatticeElement(), otherr.getLatticeElement());
+					NullALatticeElement newLE = NullALatticeElement.leastUpperBound(r.getLatticeElement(), otherr.getLatticeElement());
 					lub.add(Record.getNewRecord(r.getCName(), r.getIden(), r.isField(), newLE, null));
 				}
 			}
@@ -65,16 +72,16 @@ public class Context {
 				noMatch.add(r);
 			}
 			else {
-				lr2.remove(isVisited)
+				lr2.remove(isVisited);
 			}
 		}
 
 		for (Record r : lr2) {
-			Record isVisited;
+			Record isVisited = null;
 			for (Record otherr : lr1) {
 				if (r.equals(otherr)) {
 					isVisited = otherr;
-					NullALatticeElement newLE = NullALatticeElement.lub(r.getLatticeElement(), otherr.getLatticeElement());
+					NullALatticeElement newLE = NullALatticeElement.leastUpperBound(r.getLatticeElement(), otherr.getLatticeElement());
 					lub.add(Record.getNewRecord(r.getCName(), r.getIden(), r.isField(), newLE, null));
 				}
 			}
@@ -87,13 +94,17 @@ public class Context {
 			StringPair cisp = r.getClassIdentifierSP();
 			Record prevR = getRecord(cisp, r.isField());
 			if (prevR == null) {
-				lub.add(Record.getNewRecord(r.getCName(), r.getIden(), r.isField(), NullALatticeElement.getDontKnow(), null));
+				lub.add(Record.getNewRecord(r.getCName(), r.getIden(), r.isField(), NullALatticeElement.getNotNull(), null));
 			}
 			else {
-				NullALatticeElement newLE = NullALatticeElement.lub(r.getLatticeElement(), prevR.getLatticeElement());
+				NullALatticeElement newLE = NullALatticeElement.leastUpperBound(r.getLatticeElement(), prevR.getLatticeElement());
 				lub.add(Record.getNewRecord(r.getCName(), r.getIden(), r.isField(), newLE, null));
 			}
 		}
+
+		System.out.println("l1: " + lr1);
+		System.out.println("l2: " + lr2);
+		System.out.println("Least upper bound : " + lub);
 
 		return lub;
 
@@ -116,7 +127,7 @@ public class Context {
 				priorRecords.add(prevR);
 			}
 			else {
-				priorRecords.add(Record.getNewRecord(cisp.first, cisp.second, r.isField, NullALatticeElement.getDontKnow(), null));
+				priorRecords.add(Record.getNewRecord(cisp.first, cisp.second, r.isField(), NullALatticeElement.getDontKnow(), null));
 			}
 		}
 
@@ -124,7 +135,7 @@ public class Context {
 	}
 
 	public Record getRecord(StringPair cisp, boolean field) {
-		StringPair cisp = new StringPair(c, iden);
+		String cOfIden = cha.getClassOfIdentifier(new StringPair(cisp.first, mname), cisp.second);
 
 		ListIterator<Record> li = branchRecords.listIterator(branchRecords.size());
 		while (li.hasPrevious()) {
@@ -141,20 +152,25 @@ public class Context {
 		}
 
 		if (branch){
-			return c.getMostRecentRecord(getSP(), iden, field);
+			return prevContext.getRecord(cisp, field);
 		}
 		else {
-			return npa.getMostRecentRecord(getSP(), iden, field);
+			return npa.getMostRecentRecord(cisp, field);
 		}
 	}
 
 	public Record getRecord(String iden) {
-		boolean isField = !(cha.isMethodVariable(getSP(), iden));
-		return getRecord(new StringPair(cname, iden), isField);
+		String cOfIden = cha.getClassOfIdentifier(getSP(), iden);
+		if (cOfIden == null)
+			return null;
+
+		boolean isField = !(cha.isMethodVariable(new StringPair(cOfIden, mname), iden));
+		return getRecord(new StringPair(cOfIden, iden), isField);
 	}
 
 	public void commitRecord(String iden, NullALatticeElement e, Node n) {
-		boolean isAField = !(cha.isMethodVariable(new StringPair(cname, mname), iden));
+		String cOfIden = cha.getClassOfIdentifier(getSP(), iden);
+		boolean isAField = !(cha.isMethodVariable(new StringPair(cOfIden, mname), iden));
 		Record r = Record.getNewRecord(cname, iden, isAField, e, n);
 
 		if (branch) {
@@ -167,7 +183,7 @@ public class Context {
 
 	public void commitRecords(List<Record> rs) {
 		if (branch) {
-			branch.addAll(rs);
+			branchRecords.addAll(rs);
 		}
 		else {
 			npa.commitRecords(rs);

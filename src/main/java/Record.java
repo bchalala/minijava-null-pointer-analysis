@@ -5,6 +5,10 @@ import java.util.*;
 
 public class Record {
 
+	private static int num = 0;
+
+	private int thisnum;
+
 	private String identifier;
 	private String cname;
 
@@ -22,6 +26,8 @@ public class Record {
 		this.e = e;
 		this.n = n;
 		this.first = first;
+		thisnum = num;
+		num++;
 	}
 
 	public NullALatticeElement getLatticeElement() { return e; }
@@ -39,6 +45,7 @@ public class Record {
 		return (getClassIdentifierSP().equals(r.getClassIdentifierSP()) && (isField == r.isField()));
 	}
 
+	public static void resetCounter() { num = 0; }
 
 	public static Record getFreshFieldRecord(String classname, String fieldname) {
 		return new Record(fieldname, classname, true, NullALatticeElement.getDontKnow(), null);
@@ -57,7 +64,7 @@ public class Record {
 		if (isField) 
 			f = "field: ";
 
-		return "class: " + cname + " | " + f + identifier + " " + "Lattice: " + e.toString();
+		return "\nclass: " + cname + " | " + f + identifier + " " + "Lattice: " + e.toString() + " num = " + thisnum;
 	}
 
 	/*

@@ -6,15 +6,12 @@ import syntaxtree.*;
 import visitor.*;
 import java.util.*;
 
-public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
+public class NullPtrCheckVisitor extends GJDepthFirst<Context, Context> {
 
    private ClassHierarchyAnalysis cha;
    private NullPtrAnalysis npa;
 
-   private boolean isIdentifier;
-   private List<Record> curMArgs = new ArrayList<Record>();
-
-   public NullPtrAnalysisVisitor(ClassHierarchyAnalysis cha, NullPtrAnalysis npa) {
+   public NullPtrCheckVisitor(ClassHierarchyAnalysis cha, NullPtrAnalysis npa) {
       this.cha = cha;
       this.npa = npa;
    }
@@ -111,13 +108,10 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       // Here, the eval of this needs to be commited as the out of this function
       argu.eval = null;
       n.f10.accept(this, argu);
-      if (argu.eval != null) {
-        npa.addRet(argu.getSP(), argu.eval);
-      }
 
       npa.flushMethodRecordStore(argu.getSP());
-   		return null; 
- 		}
+   	  return null; 
+ 	}
 
 
    /**
@@ -128,7 +122,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     */
    public Context visit(Type n, Context argu) {
    		return n.f0.accept(this, argu); 
- 		}
+ 	}
 
        /**
     * f0 -> <IDENTIFIER>
@@ -138,6 +132,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       if (iden != null) {
         argu.eval = iden.getLatticeElement();
         argu.expType.add(argu.getVariableType(n.f0.toString()));
+        argu.prevRecord = iden;
       }
       return argu; 
     }
@@ -155,7 +150,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       argu.expType = new HashSet<String>();
       n.f0.accept(this, argu);
    		return null; 
- 		}
+ 	}
 
    /**
     * f0 -> "{"
@@ -165,7 +160,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
    public Context visit(Block n, Context argu) {
       n.f1.accept(this, argu);
    		return null; 
- 		}
+ 	}
 
    /**
     * f0 -> Identifier()
@@ -182,8 +177,8 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
         argu.commitRecord(iden, e, n);
       }
 
-   		return argu; 
- 		}
+   	  return argu; 
+ 	}
 
    /**
     * f0 -> Identifier()
@@ -197,8 +192,8 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
    public Context visit(ArrayAssignmentStatement n, Context argu) {
       n.f2.accept(this, argu);
       n.f5.accept(this, argu);
-   		return null; 
- 		}
+   	  return null; 
+ 	}
 
    /**
     * f0 -> "if"
@@ -213,16 +208,14 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       n.f2.accept(this, argu);
 
       Context c1 = new Context(argu);
-      n.f4.accept(this, c1);
-
       Context c2 = new Context(argu);
+      n.f4.accept(this, c1);
       n.f6.accept(this, c2);
-
-      List<Record> lr = argu.leastUpperBound(c1.branchRecords, c2.branchRecords);
 
       argu.commitRecords(c1.branchRecords);
       argu.commitRecords(c2.branchRecords);
 
+      List<Record> lr = argu.leastUpperBound(c1.branchRecords, c2.branchRecords);
       argu.commitRecords(lr);
 
    		return null; 
@@ -241,11 +234,10 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       // creates a branching context
       Context c1 = new Context(argu);
       n.f4.accept(this, c1);
-      argu.commitRecords(c1.branchRecords);
       argu.commitRecords(argu.leastUpperBound(c1.branchRecords));
 
    		return null; 
- 		}
+ 	}
 
    /**
     * f0 -> "System.out.println"
@@ -257,7 +249,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
    public Context visit(PrintStatement n, Context argu) {
       n.f2.accept(this, argu);
    		return null; 
- 		}
+ 	}
 
    /**
     * f0 -> AndExpression()
@@ -272,7 +264,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
     */
    public Context visit(Expression n, Context argu) {
    		return n.f0.accept(this, argu); 
- 		}
+ 	}
 
    /**
     * f0 -> PrimaryExpression()
@@ -368,6 +360,16 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       argu.expType = new HashSet<String>();
       n.f0.accept(this, argu);
 
+      if (argu.eval.equals(NullALatticeElement.getDontKnow())){
+        System.out.print("null pointer error");
+        System.exit(0);
+      } /*
+      else {
+        System.out.println(argu.cname + " " + argu.mname);
+        System.out.println(mname);
+        System.out.println("prevRecord: " + argu.prevRecord + "\n");
+      } */
+
       // Get the CHA(m) in order to get the correct class fields
       Set<String> ts = argu.expType;
       Set<String> cs = new HashSet<String>();
@@ -375,7 +377,6 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
         cs.addAll(cha.getClassesWithMethod(s, mname));
       }
       argu.expType = prevExpType;
-
 
       argu.commitRecords(npa.refreshClassFields(argu.getSP()));
 
@@ -404,6 +405,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       // Get the least upper bound of the potential return types of this function
       NullALatticeElement e = null;
       StringPair cmPair = new StringPair("", mname);
+      // System.out.println("method " + mname + " " + cs);
       for (String cname : cs) {
         cmPair.first = cname;
         NullALatticeElement curE = npa.getRet(cmPair);
@@ -476,7 +478,7 @@ public class NullPtrAnalysisVisitor extends GJDepthFirst<Context, Context> {
       argu.eval = NullALatticeElement.getNotNull(); 
       argu.expType.add(n.f1.f0.toString());
    		return argu;
- 		}
+ 	}
 
        /**
     * f0 -> "new"
