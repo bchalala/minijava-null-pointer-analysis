@@ -1,0 +1,2 @@
+
+public class ResConstraint implements NullPtrAnalysisConstraint
